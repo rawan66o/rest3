@@ -397,7 +397,15 @@ function calculateTopDishesFromOrders(orders) {
     className: colors[index]?.className || colors[0].className,
     color: colors[index]?.color || colors[0].color,
   }));
+  
 }
+
+const defaultStats = [
+  { title: "الإحصائيات", value: 0, icon: "chart", iconImage: dashboardImages.statsChart, className: "stats-card--blue" },
+  { title: "الطلبات", value: 0, icon: "receipt", iconImage: dashboardImages.statsOrders, className: "stats-card--orange" },
+  { title: "قيد التحضير", value: 0, icon: "chef", iconImage: dashboardImages.statsPreparing, className: "stats-card--yellow" },
+  { title: "الإيرادات", value: "0", icon: "revenue", iconImage: dashboardImages.statsRevenue, className: "stats-card--green" },
+];
 
 function buildStats(orders, products, categories) {
   const normalizedOrders = orders.map((order, index) =>
@@ -492,20 +500,19 @@ function downloadOrdersInvoice(orders) {
 }
 
 function Dashboard() {
-  const [admin, setAdmin] = useState({ name: "اسم الأدمن", role: "admin" });
+  const [admin, setAdmin] = useState({
+    name: "جاري التحميل...",
+    role: "admin",
+  });
   const [notificationCount, setNotificationCount] = useState(0);
-  const [stats, setStats] = useState(localStats);
-
-  const [orders, setOrders] = useState(() =>
-    localOrders.map((order, index) => normalizeOrder(order, index)),
-  );
+  const [stats, setStats] = useState(defaultStats); // تأكد أن defaultStats معرفة فوقها
+  const [orders, setOrders] = useState([]);
 
   const [selectedStatus, setSelectedStatus] = useState("all");
   const [selectedPeriod, setSelectedPeriod] = useState("month");
 
   useEffect(() => {
     document.body.classList.add("dashboard-page-body");
-
     return () => {
       document.body.classList.remove("dashboard-page-body");
     };
@@ -515,6 +522,11 @@ function Dashboard() {
     async function loadDashboard() {
       try {
         const token = await getAuthorizedToken();
+
+        if (!token) {
+          window.location.href = "/login";
+          return;
+        }
 
         const [
           meResult,
@@ -532,12 +544,21 @@ function Dashboard() {
 
         const adminData = meResult?.data || meResult;
 
-        if (adminData?.name) {
-          setAdmin({
-            name: adminData.name,
-            role: adminData.role || "admin",
-          });
+        if (!adminData) {
+          localStorage.removeItem("token");
+          window.location.href = "/login";
+          return;
         }
+
+        if (adminData.role !== "admin" && adminData.role !== "administrator") {
+          window.location.href = "/";
+          return;
+        }
+
+        setAdmin({
+          name: adminData.name || "اسم الأدمن",
+          role: adminData.role || "admin",
+        });
 
         setNotificationCount(getArray(notificationsResult).length);
 
@@ -545,43 +566,19 @@ function Dashboard() {
         const rawProducts = getArray(productsResult);
         const rawCategories = getArray(categoriesResult);
 
-        const normalizedOrders =
-          rawOrders.length > 0
-            ? rawOrders.map(normalizeOrder)
-            : localOrders.map((order, index) => normalizeOrder(order, index));
+        const normalizedOrders = rawOrders.map(normalizeOrder);
 
         setOrders(normalizedOrders);
         setStats(buildStats(normalizedOrders, rawProducts, rawCategories));
       } catch (error) {
         console.log("Dashboard API error:", error.message);
-
-        const fallbackOrders = localOrders.map((order, index) =>
-          normalizeOrder(order, index),
-        );
-
-        setStats(localStats);
-        setOrders(fallbackOrders);
+        setStats(defaultStats);
+        setOrders([]);
       }
     }
 
     loadDashboard();
   }, []);
-
-  const adminData = meResult?.data || meResult;
-
-  // المستخدم غير مسجل دخول
-  if (!adminData) {
-    localStorage.removeItem("token");
-    window.location.href = "/login";
-    return;
-  }
-
-  // ليس أدمن
-  if (adminData.role !== "admin" && adminData.role !== "administrator") {
-    localStorage.removeItem("token");
-    window.location.href = "/";
-    return;
-  }
 
   const visibleOrders = useMemo(() => {
     return filterOrdersByStatus(orders, selectedStatus);
