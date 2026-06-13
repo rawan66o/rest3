@@ -80,28 +80,33 @@ export function formatPrice(value, currency = "") {
 }
 
 export async function getJson(url, token) {
-  const headers = {
-    Accept: "application/json",
-  };
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      headers: { 
+        Accept: "application/json", 
+        ...(token && { Authorization: `Bearer ${token}` }) 
+      },
+    });
 
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
+    const contentType = response.headers.get("content-type");
+    // إذا كان الرد HTML (صفحة الحماية) ارمِ خطأ خاصاً
+    if (!contentType || !contentType.includes("application/json")) {
+      throw new Error("سيرفر الحماية اعتراض الطلب");
+    }
+
+    const result = await response.json();
+    
+    // إذا كان هناك خطأ ولكن توجد بيانات، اقبلها (حل لمشكلة الباك إند)
+    if (!response.ok && !(result && result.data)) {
+      throw new Error(result?.message || `خطأ: ${response.status}`);
+    }
+
+    return result;
+  } catch (error) {
+    console.error("API Error:", error.message);
+    throw error;
   }
-
-  const response = await fetch(url, {
-    method: "GET",
-    headers,
-  });
-
-  const result = await response.json().catch(() => null);
-
-  if (!response.ok) {
-    const message =
-      result?.message || result?.error || `Request failed: ${response.status}`;
-    throw new Error(message);
-  }
-
-  return result;
 }
 
 export async function login(

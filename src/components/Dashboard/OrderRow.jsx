@@ -1,10 +1,13 @@
 import AdminAvatar from "./AdminAvatar";
 import Icon from "./Icon";
-import { orderImages } from "../../data/dashboardData";
+import { dashboardImages } from "../../data/dashboardData"; 
 
-function OrderRow({ order, index }) {
-  const images = order.images?.length ? order.images : orderImages;
-  const extraCount = order.extraItemsCount ?? 2;
+function OrderRow({ order }) {
+  const images = order.images || [];
+  const extraCount = order.extraItemsCount || 0;
+
+  const img1 = images[0] || dashboardImages.meal;
+  const img2 = images[1] || dashboardImages.burger;
 
   return (
     <article className="order-row">
@@ -25,14 +28,16 @@ function OrderRow({ order, index }) {
         <strong className="order-row__price">{order.price}</strong>
 
         <div className="order-row__images">
-          <span className="order-row__images-count">+{extraCount}</span>
+          {extraCount > 0 ? (
+            <span className="order-row__images-count">+{extraCount}</span>
+          ) : null}
 
           <div className="order-row__images-item order-row__images-item--1">
-            <img src={images[0]} alt="طبق مطلوب" />
+            <img src={img1} alt="طبق مطلوب" />
           </div>
 
           <div className="order-row__images-item order-row__images-item--2">
-            <img src={images[1] || orderImages[(index + 1) % orderImages.length]} alt="طبق مطلوب" />
+            <img src={img2} alt="طبق مطلوب" />
           </div>
         </div>
 
@@ -40,7 +45,7 @@ function OrderRow({ order, index }) {
           <p>{order.dishName}</p>
           <span>
             {order.dishDetails}
-            <small>+{extraCount}</small>
+            {extraCount > 0 && <small>+{extraCount}</small>}
           </span>
         </div>
 

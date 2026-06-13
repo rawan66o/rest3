@@ -2,30 +2,22 @@ import { useEffect, useState } from "react";
 import "./Categories.css";
 
 import CategoryCard from "../CategoryCard/CategoryCard";
-import { categories as localCategories } from "../../../data/restaurantData";
 import { API, getArray, getJson } from "../../../api";
 
 const categoriesTitleImg = `${process.env.PUBLIC_URL || ""}/images/categories.png`;
 
-function normalizeCategory(category, index) {
-  const fallbackCategory = localCategories[index % localCategories.length];
-
+function normalizeCategory(category) {
   return {
-    id: category.id || category.uuid || category._id || index + 1,
-    title: category.name || category.title || "صنف",
+    id: category.id || category.uuid || category._id || Math.random(),
+    title: category.name || category.title || "صنف غير معروف",
     description: category.description || "",
     count: `${Number(category.products_count || 0)} صنف في المطعم`,
-    image:
-      category.image_url ||
-      category.image ||
-      category.photo ||
-      fallbackCategory?.image ||
-      "",
+    image: category.image_url || category.image || category.photo || "",
   };
 }
 
 function Categories() {
-  const [categoryList, setCategoryList] = useState(localCategories);
+  const [categoryList, setCategoryList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -38,15 +30,11 @@ function Categories() {
         const result = await getJson(API.categories);
         const apiCategories = getArray(result);
 
-        if (apiCategories.length > 0) {
-          setCategoryList(apiCategories.map(normalizeCategory));
-        } else {
-          setCategoryList(localCategories);
-        }
+        setCategoryList(apiCategories.map(normalizeCategory));
       } catch (err) {
         console.log("Categories API error:", err.message);
-        setError("تعذر جلب الأصناف، تم عرض بيانات تجريبية مؤقتاً.");
-        setCategoryList(localCategories);
+        setError("تعذر جلب الأصناف من الخادم. يرجى المحاولة لاحقاً.");
+        setCategoryList([]);
       } finally {
         setLoading(false);
       }
@@ -67,6 +55,10 @@ function Categories() {
         <p className="categories__message categories__message--error">
           {error}
         </p>
+      )}
+
+      {!loading && !error && categoryList.length === 0 && (
+         <p className="categories__message">لا توجد أصناف متاحة حالياً.</p>
       )}
 
       <div className="categories__grid">

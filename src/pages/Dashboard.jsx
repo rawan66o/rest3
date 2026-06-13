@@ -9,25 +9,19 @@ import Sidebar from "../components/Dashboard/Sidebar";
 import StatCard from "../components/Dashboard/StatCard";
 import TopDishesChart from "../components/Dashboard/TopDishesChart";
 
-import {
-  stats as localStats,
-  orders as localOrders,
-  orderImages,
-  dashboardImages,
-} from "../data/dashboardData";
+// استيراد نظيف: نحتاج فقط للصور الثابتة الخاصة بلوحة التحكم
+import { dashboardImages } from "../data/dashboardData";
 
 import { API, getArray, getAuthorizedToken, getJson } from "../api";
 
 function normalizeStatus(status) {
   const value = String(status || "").toLowerCase();
-
   if (value === "preparing") return "preparing";
   if (value === "pending") return "pending";
   if (value === "completed" || value === "done" || value === "delivered") {
     return "completed";
   }
   if (value === "cancelled" || value === "canceled") return "cancelled";
-
   return "new";
 }
 
@@ -44,7 +38,6 @@ function getCustomerType(order) {
   ) {
     return "داخل المطعم";
   }
-
   return "زبون خارجي";
 }
 
@@ -53,28 +46,23 @@ function formatOrderId(order, index) {
     const value = String(order.order_number);
     return value.startsWith("#") ? value : `#${value}`;
   }
-
   if (order.code) {
     const value = String(order.code);
     return value.startsWith("#") ? value : `#${value}`;
   }
-
   const id = String(order.id || "");
-
   if (/^\d+$/.test(id)) {
     return `#ORD-${id}`;
   }
-
   return `#ORD-${1021 + index}`;
 }
 
 function formatOrderTime(value) {
-  if (!value) return "منذ 3 دقائق";
+  if (!value) return "الآن";
 
   const date = new Date(value);
-
   if (Number.isNaN(date.getTime())) {
-    return "منذ 3 دقائق";
+    return "الآن";
   }
 
   const now = new Date();
@@ -92,18 +80,28 @@ function formatOrderTime(value) {
 }
 
 function getOrderTotal(order) {
+  // التقاط إجمالي الطلب مهما كان اسمه في الباك إند
   const value =
-    order.total_amount || order.totalAmount || order.total || order.amount || 0;
+    order.total_amount ||
+    order.totalAmount ||
+    order.total ||
+    order.grand_total ||
+    order.amount ||
+    order.price ||
+    order.total_price ||
+    0;
 
-  return Number(String(value).replace(/[^\d.]/g, "")) || 0;
+  // تنظيف الرقم
+  const cleanValue = String(value)
+    .replace(/,/g, "")
+    .replace(/[^\d.]/g, "");
+  return Number(cleanValue) || 0;
 }
 
 function formatPrice(order) {
-  if (order.price) return order.price;
-
   const total = getOrderTotal(order);
 
-  if (!total) {
+  if (!total || isNaN(total)) {
     return "0 ل.س";
   }
 
@@ -112,19 +110,16 @@ function formatPrice(order) {
 
 function limitText(text, maxLength = 35) {
   if (!text) return "";
-
   const value = String(text).trim();
-
   if (value.length <= maxLength) {
     return value;
   }
-
   return `${value.slice(0, maxLength)}...`;
 }
 
-function getOrderImages(order, index) {
+// أزلنا الاعتماد على الصور الوهمية من هنا
+function getOrderImages(order) {
   const items = order.items || [];
-
   const apiImages = items
     .map((item) => item.product?.image_url || item.product?.image)
     .filter(Boolean);
@@ -137,10 +132,7 @@ function getOrderImages(order, index) {
     return order.images;
   }
 
-  return [
-    orderImages[index % orderImages.length],
-    orderImages[(index + 1) % orderImages.length],
-  ];
+  return []; // إرجاع مصفوفة فارغة بدلاً من الصور الوهمية
 }
 
 function normalizeOrder(order, index) {
@@ -148,7 +140,7 @@ function normalizeOrder(order, index) {
   const firstItem = items[0] || {};
   const firstProduct = firstItem.product || {};
   const firstCategory = firstProduct.category || {};
-  const images = getOrderImages(order, index);
+  const images = getOrderImages(order); // استخدام الدالة بدون الـ index
 
   const orderStatus = normalizeStatus(
     order.order_status || order.progress_status || order.orderState,
@@ -164,23 +156,17 @@ function normalizeOrder(order, index) {
 
   return {
     ...order,
-
     createdAt,
-
     id: formatOrderId(order, index),
     time: order.time || formatOrderTime(createdAt),
-
     customerName:
       order.customer_name ||
       order.customerName ||
       order.customer?.name ||
       order.user?.name ||
       "اسم العميل",
-
     customerType: getCustomerType(order),
-
     status: orderStatus,
-
     statusLabel:
       order.statusLabel ||
       (orderStatus === "preparing"
@@ -192,41 +178,32 @@ function normalizeOrder(order, index) {
             : orderStatus === "cancelled"
               ? "ملغى"
               : "طلب جديد"),
-
     price: formatPrice(order),
     total: getOrderTotal(order),
-
     images,
-
     extraItemsCount:
       items.length > 0
         ? Math.max(items.length - 2, 0)
         : Math.max(images.length - 2, 0),
-
     dishName:
       firstProduct.name || order.dishName || order.product_name || "طلب جديد",
-
     dishTitle:
       firstProduct.name ||
       order.dishTitle ||
       order.dishName ||
       order.product_name ||
       "طبق",
-
     quantity:
       Number(firstItem.quantity || firstItem.qty || order.quantity || 1) || 1,
-
     dishDetails: limitText(
       order.notes || order.dishDetails || firstItem.notes || "بدون ملاحظات",
       35,
     ),
-
     categoryName:
       firstCategory.name ||
       order.categoryName ||
       order.category?.name ||
-      "الأطباق الرئيسية",
-
+      "القسم العام",
     categoryDetails:
       order.payment_method ||
       order.paymentMethod ||
@@ -242,9 +219,7 @@ function getOrderDate(order) {
     order.date ||
     order.orderDate ||
     order.createdDate;
-
   const date = value ? new Date(value) : new Date();
-
   return Number.isNaN(date.getTime()) ? new Date() : date;
 }
 
@@ -273,15 +248,12 @@ function buildOrdersChartData(orders, period) {
 
   if (period === "day") {
     const hours = [8, 10, 12, 14, 16, 18, 20, 22];
-
     return hours.map((hour, index) => {
       const nextHour = hours[index + 1] || 24;
-
       return {
         label: String(hour),
         value: orders.filter((order) => {
           const date = getOrderDate(order);
-
           return (
             isSameDay(date, today) &&
             date.getHours() >= hour &&
@@ -294,7 +266,6 @@ function buildOrdersChartData(orders, period) {
 
   if (period === "week") {
     const labels = ["أحد", "إثن", "ثلا", "أرب", "خمي", "جمع", "سبت"];
-
     return labels.map((label, dayIndex) => ({
       label,
       value: orders.filter((order) => {
@@ -309,7 +280,6 @@ function buildOrdersChartData(orders, period) {
       label: String(index + 1),
       value: orders.filter((order) => {
         const date = getOrderDate(order);
-
         return (
           date.getFullYear() === today.getFullYear() &&
           date.getMonth() === index
@@ -322,7 +292,6 @@ function buildOrdersChartData(orders, period) {
     label: String(day),
     value: orders.filter((order) => {
       const date = getOrderDate(order);
-
       return (
         date.getFullYear() === today.getFullYear() &&
         date.getMonth() === today.getMonth() &&
@@ -343,38 +312,29 @@ function calculateTopDishesFromOrders(orders) {
 
   const counts = orders.reduce((acc, order) => {
     const items = order.items || [];
-
     if (items.length > 0) {
       items.forEach((item) => {
         const product = item.product || {};
-
         const title =
           product.name ||
           item.name ||
           order.dishTitle ||
           order.dishName ||
           "طبق";
-
         const quantity = Number(item.quantity || item.qty || 1) || 1;
-
         acc[title] = (acc[title] || 0) + quantity;
       });
-
       return acc;
     }
 
     const title =
       order.dishTitle || order.dishName || order.product_name || "طبق";
-
     const quantity = Number(order.quantity || 1) || 1;
-
     acc[title] = (acc[title] || 0) + quantity;
-
     return acc;
   }, {});
 
   const sortedDishes = Object.entries(counts).sort((a, b) => b[1] - a[1]);
-
   const total = sortedDishes.reduce((sum, [, count]) => sum + count, 0);
 
   if (!total) {
@@ -382,7 +342,6 @@ function calculateTopDishesFromOrders(orders) {
   }
 
   const topThree = sortedDishes.slice(0, 3);
-
   const otherCount = sortedDishes
     .slice(3)
     .reduce((sum, [, count]) => sum + count, 0);
@@ -397,14 +356,37 @@ function calculateTopDishesFromOrders(orders) {
     className: colors[index]?.className || colors[0].className,
     color: colors[index]?.color || colors[0].color,
   }));
-  
 }
 
 const defaultStats = [
-  { title: "الإحصائيات", value: 0, icon: "chart", iconImage: dashboardImages.statsChart, className: "stats-card--blue" },
-  { title: "الطلبات", value: 0, icon: "receipt", iconImage: dashboardImages.statsOrders, className: "stats-card--orange" },
-  { title: "قيد التحضير", value: 0, icon: "chef", iconImage: dashboardImages.statsPreparing, className: "stats-card--yellow" },
-  { title: "الإيرادات", value: "0", icon: "revenue", iconImage: dashboardImages.statsRevenue, className: "stats-card--green" },
+  {
+    title: "الإحصائيات",
+    value: 0,
+    icon: "chart",
+    iconImage: dashboardImages.statsChart,
+    className: "stats-card--blue",
+  },
+  {
+    title: "الطلبات",
+    value: 0,
+    icon: "receipt",
+    iconImage: dashboardImages.statsOrders,
+    className: "stats-card--orange",
+  },
+  {
+    title: "قيد التحضير",
+    value: 0,
+    icon: "chef",
+    iconImage: dashboardImages.statsPreparing,
+    className: "stats-card--yellow",
+  },
+  {
+    title: "الإيرادات",
+    value: "0",
+    icon: "revenue",
+    iconImage: dashboardImages.statsRevenue,
+    className: "stats-card--green",
+  },
 ];
 
 function buildStats(orders, products, categories) {
@@ -457,7 +439,6 @@ function buildStats(orders, products, categories) {
 
 function filterOrdersByStatus(orders, selectedStatus) {
   if (selectedStatus === "all") return orders;
-
   return orders.filter((order) => order.status === selectedStatus);
 }
 
@@ -505,7 +486,7 @@ function Dashboard() {
     role: "admin",
   });
   const [notificationCount, setNotificationCount] = useState(0);
-  const [stats, setStats] = useState(defaultStats); // تأكد أن defaultStats معرفة فوقها
+  const [stats, setStats] = useState(defaultStats);
   const [orders, setOrders] = useState([]);
 
   const [selectedStatus, setSelectedStatus] = useState("all");
@@ -566,7 +547,9 @@ function Dashboard() {
         const rawProducts = getArray(productsResult);
         const rawCategories = getArray(categoriesResult);
 
-        const normalizedOrders = rawOrders.map(normalizeOrder);
+        const normalizedOrders = rawOrders.map((order, i) =>
+          normalizeOrder(order, i),
+        );
 
         setOrders(normalizedOrders);
         setStats(buildStats(normalizedOrders, rawProducts, rawCategories));

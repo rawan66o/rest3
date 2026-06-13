@@ -6,7 +6,9 @@ function MealCard({ meal }) {
   const description = meal.description || "";
   const image = meal.image_url || meal.image;
   const category = meal.category?.name || meal.badge || meal.category || "";
-  const price = meal.price ? formatPrice(meal.price) : meal.price || "0";
+  const price = meal.price
+    ? formatPrice(meal.price).replace("ل.س", "").trim()
+    : "0";
   const currency = meal.currency || "ل.س";
   const totalOrdered = meal.total_ordered || meal.totalOrdered;
 
